@@ -6,8 +6,11 @@ from __future__ import division
 
 import pandas as pd
 import numpy as np
+import warnings
+import numpy
 from numpy import log, exp, logaddexp, asarray, any as npany
 from pandas import DataFrame
+import scipy
 from scipy.special import gammaln, hyp2f1, betaln
 from scipy.special import logsumexp
 from scipy.optimize import minimize
@@ -525,18 +528,63 @@ class ParetoNBDFitter(BaseFitter):
             if minimize_options["disp"]:
                 print("Optimize function with {}".format(fit_method))
 
-            output = minimize(
-                self._negative_log_likelihood,
-                method=fit_method,
-                tol=tol,
-                x0=current_init_params,
-                args=minimizing_function_args,
-                options=minimize_options,
-            )
+            # Convert printed numpy warnings to actual RuntimeWarnings
+            numpy.seterr('warn')
+            # Use python's warnings module to catch warnings as if they're errors,
+            # specifically warnings with an 'invalid value encountered in subtract'
+            # message, which is the warning that implies an infinite or nan
+            # log-likelihood value
+            warnings.filterwarnings('error', message='invalid value encountered in subtract')
+
+            stored_params = []
+            def print_and_store_params(xk):
+                print(xk)
+                stored_params.append(xk)
+
+            try:
+                output = minimize(
+                    self._negative_log_likelihood,
+                    method=fit_method,
+                    tol=tol,
+                    x0=current_init_params,
+                    callback=print_and_store_params,
+                    args=minimizing_function_args,
+                    options=minimize_options,
+                )
+            except RuntimeWarning:
+                print("Warning encountered, retrying...")
+                last_params = stored_params[-1]
+                f, r, t, weights, reg_param = minimizing_function_args
+                likelihoods = ParetoNBDFitter._conditional_log_likelihood(last_params, f, r, t)
+
+                inf_indices = np.where(np.isinf(likelihoods))
+                nan_indices = np.where(np.isnan(likelihoods))
+                bad_indices = np.concatenate((inf_indices[0], nan_indices[0]))
+                print(f"Number of bad indices: {bad_indices.size}")
+                print(f"Problematic entries: {f[bad_indices]}, {r[bad_indices]}, {t[bad_indices]}")
+
+                f = np.delete(f, bad_indices)
+                r = np.delete(r, bad_indices)
+                t = np.delete(t, bad_indices)
+                weights = np.delete(weights, bad_indices)
+
+                minimizing_function_args = (f, r, t, weights, reg_param)
+
+                output = minimize(
+                    self._negative_log_likelihood,
+                    method=fit_method,
+                    tol=tol,
+                    x0=current_init_params,
+                    callback=print_and_store_params,
+                    args=minimizing_function_args,
+                    options=minimize_options,
+                )
+
             sols.append(output.x)
             ll.append(output.fun)
 
             total_count += 1
+
         argmin_ll, min_ll = min(enumerate(ll), key=lambda x: x[1])
         minimizing_params = sols[argmin_ll]
 
