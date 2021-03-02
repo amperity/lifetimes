@@ -560,7 +560,12 @@ class ParetoNBDFitter(BaseFitter):
                 inf_indices = np.where(np.isinf(likelihoods))
                 nan_indices = np.where(np.isnan(likelihoods))
                 bad_indices = np.concatenate((inf_indices[0], nan_indices[0]))
-                print(f"Number of bad indices: {bad_indices.size}")
+                if bad_indices.size > 10000:
+                    raise Exception(f"More than 10000 problematic rows removed. \
+                                     Either the param values ({last_params}) are wonky or there's scaling
+                                     issues with the data. Review f, r, t features to see if input is sensical")
+                else:
+                    print(f"Number of bad indices: {bad_indices.size}")
                 print(f"Problematic entries: {f[bad_indices]}, {r[bad_indices]}, {t[bad_indices]}")
 
                 f = np.delete(f, bad_indices)
