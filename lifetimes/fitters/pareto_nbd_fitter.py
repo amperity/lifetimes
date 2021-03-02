@@ -535,55 +535,55 @@ class ParetoNBDFitter(BaseFitter):
             # message, which is the warning that implies an infinite or nan
             # log-likelihood value
             warnings.filterwarnings('error', message='invalid value encountered in subtract')
+            
+            retries = 0
+            def try_optimize(minimizing_function_args, last_params=None, num_retries=3):
+                if last_params is not None:
+                    f, r, t, weights, reg_param = minimizing_function_args
+                    likelihoods = ParetoNBDFitter._conditional_log_likelihood(last_params, f, r, t)
 
-            stored_params = []
-            def print_and_store_params(xk):
-                print(xk)
-                stored_params.append(xk)
+                    inf_indices = np.where(np.isinf(likelihoods))
+                    nan_indices = np.where(np.isnan(likelihoods))
+                    bad_indices = np.concatenate((inf_indices[0], nan_indices[0]))
+                    if bad_indices.size > 10000:
+                        raise Exception(f"More than 10000 problematic rows removed. \
+                                        Either the param values ({last_params}) are wonky or there's scaling
+                                        issues with the data. Review f, r, t features to see if input is sensical")
+                    else:
+                        print(f"Number of bad indices: {bad_indices.size}")
+                    print(f"Problematic entries: {f[bad_indices]}, {r[bad_indices]}, {t[bad_indices]}")
 
-            try:
-                output = minimize(
-                    self._negative_log_likelihood,
-                    method=fit_method,
-                    tol=tol,
-                    x0=current_init_params,
-                    callback=print_and_store_params,
-                    args=minimizing_function_args,
-                    options=minimize_options,
-                )
-            except RuntimeWarning:
-                print("Warning encountered, retrying...")
-                last_params = stored_params[-1]
-                f, r, t, weights, reg_param = minimizing_function_args
-                likelihoods = ParetoNBDFitter._conditional_log_likelihood(last_params, f, r, t)
+                    f = np.delete(f, bad_indices)
+                    r = np.delete(r, bad_indices)
+                    t = np.delete(t, bad_indices)
+                    weights = np.delete(weights, bad_indices)
 
-                inf_indices = np.where(np.isinf(likelihoods))
-                nan_indices = np.where(np.isnan(likelihoods))
-                bad_indices = np.concatenate((inf_indices[0], nan_indices[0]))
-                if bad_indices.size > 10000:
-                    raise Exception(f"More than 10000 problematic rows removed. \
-                                     Either the param values ({last_params}) are wonky or there's scaling
-                                     issues with the data. Review f, r, t features to see if input is sensical")
-                else:
-                    print(f"Number of bad indices: {bad_indices.size}")
-                print(f"Problematic entries: {f[bad_indices]}, {r[bad_indices]}, {t[bad_indices]}")
+                    minimizing_function_args = (f, r, t, weights, reg_param)
 
-                f = np.delete(f, bad_indices)
-                r = np.delete(r, bad_indices)
-                t = np.delete(t, bad_indices)
-                weights = np.delete(weights, bad_indices)
+                stored_params = []
+                def print_and_store_params(xk):
+                    print(xk)
+                    stored_params.append(xk)
 
-                minimizing_function_args = (f, r, t, weights, reg_param)
-
-                output = minimize(
-                    self._negative_log_likelihood,
-                    method=fit_method,
-                    tol=tol,
-                    x0=current_init_params,
-                    callback=print_and_store_params,
-                    args=minimizing_function_args,
-                    options=minimize_options,
-                )
+                try: 
+                    minimize(
+                        self._negative_log_likelihood,
+                        method=fit_method,
+                        tol=tol,
+                        x0=current_init_params,
+                        callback=print_and_store_params,
+                        args=minimizing_function_args,
+                        options=minimize_options,
+                    )
+                except RuntimeWarning:
+                    retries += 1
+                    if retries <= num_retries:
+                        print("Warning encountered, retrying...")
+                        try_optimize(minimizing_function_args, last_params=stored_params[-1], num_retries=num_retries)
+                    else:
+                        raise Exception("fit failed 3 times. Check to ensure input data is correct")
+            
+            try_optimize(minimizing_function_args, last_params=None, num_retries=3)
 
             sols.append(output.x)
             ll.append(output.fun)
