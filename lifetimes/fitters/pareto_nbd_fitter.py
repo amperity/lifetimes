@@ -566,7 +566,7 @@ class ParetoNBDFitter(BaseFitter):
                     stored_params.append(xk)
 
                 try: 
-                    minimize(
+                    output = minimize(
                         self._negative_log_likelihood,
                         method=fit_method,
                         tol=tol,
@@ -579,11 +579,13 @@ class ParetoNBDFitter(BaseFitter):
                     retries += 1
                     if retries <= num_retries:
                         print("Warning encountered, retrying...")
-                        try_optimize(minimizing_function_args, last_params=stored_params[-1], num_retries=num_retries)
+                        output = try_optimize(minimizing_function_args, last_params=stored_params[-1], num_retries=num_retries)
                     else:
                         raise Exception("fit failed 3 times. Check to ensure input data is correct")
+                
+                return output
             
-            try_optimize(minimizing_function_args, last_params=None, num_retries=3)
+            output = try_optimize(minimizing_function_args, last_params=None, num_retries=3)
 
             sols.append(output.x)
             ll.append(output.fun)
