@@ -547,7 +547,7 @@ class ParetoNBDFitter(BaseFitter):
                     bad_indices = np.concatenate((inf_indices[0], nan_indices[0]))
                     if bad_indices.size > 10000:
                         raise Exception(f"More than 10000 problematic rows removed. \
-                                        Either the param values ({last_params}) are wonky or there's scaling
+                                        Either the param values ({last_params}) are wonky or there's scaling \
                                         issues with the data. Review f, r, t features to see if input is sensical")
                     else:
                         print(f"Number of bad indices: {bad_indices.size}")
