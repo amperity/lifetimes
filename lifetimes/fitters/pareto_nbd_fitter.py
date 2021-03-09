@@ -536,8 +536,7 @@ class ParetoNBDFitter(BaseFitter):
             # log-likelihood value
             warnings.filterwarnings('error', message='invalid value encountered in subtract')
             
-            retries = 0
-            def try_optimize(minimizing_function_args, last_params=None, num_retries=3):
+            def try_optimize(minimizing_function_args, last_params=None, retry_count=0, num_retries=3):
                 if last_params is not None:
                     f, r, t, weights, reg_param = minimizing_function_args
                     likelihoods = ParetoNBDFitter._conditional_log_likelihood(last_params, f, r, t)
@@ -576,12 +575,11 @@ class ParetoNBDFitter(BaseFitter):
                         options=minimize_options,
                     )
                 except RuntimeWarning:
-                    retries += 1
-                    if retries <= num_retries:
+                    if retry_count <= num_retries:
                         print("Warning encountered, retrying...")
-                        output = try_optimize(minimizing_function_args, last_params=stored_params[-1], num_retries=num_retries)
+                        output = try_optimize(minimizing_function_args, last_params=stored_params[-1], retry_count=retry_count+1, num_retries=num_retries)
                     else:
-                        raise Exception("fit failed 3 times. Check to ensure input data is correct")
+                        raise Exception(f"fit failed {num_retries} times. Check to ensure input data is correct")
                 
                 return output
             
